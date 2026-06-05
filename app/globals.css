@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 246 60% 97%;
+    --foreground: 240 30% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 30% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 30% 10%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 243 40% 94%;
+    --secondary-foreground: 240 30% 20%;
+    --muted: 243 30% 93%;
+    --muted-foreground: 240 10% 48%;
+    --accent: 243 60% 95%;
+    --accent-foreground: 243 55% 35%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 243 30% 88%;
+    --input: 243 30% 88%;
+    --ring: 243 75% 59%;
+    --chart-1: 243 75% 59%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 160 60% 45%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --radius: 0.875rem;
+  }
+
+  .dark {
+    --background: 240 35% 7%;
+    --foreground: 240 20% 96%;
+    --card: 240 30% 11%;
+    --card-foreground: 240 20% 96%;
+    --popover: 240 30% 11%;
+    --popover-foreground: 240 20% 96%;
+    --primary: 243 75% 67%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 240 25% 17%;
+    --secondary-foreground: 240 20% 90%;
+    --muted: 240 25% 17%;
+    --muted-foreground: 240 10% 58%;
+    --accent: 243 55% 20%;
+    --accent-foreground: 243 75% 85%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 25% 17%;
+    --input: 240 25% 17%;
+    --ring: 243 75% 67%;
+    --chart-1: 243 75% 67%;
+    --chart-2: 38 92% 55%;
+    --chart-3: 160 60% 50%;
+    --chart-4: 280 65% 65%;
+    --chart-5: 340 75% 60%;
+  }
+
+  * { @apply border-border outline-ring/50; }
+
+  /* Menus déroulants natifs — forcer couleurs lisibles indépendamment du thème */
+  select option {
+    background-color: #ffffff;
+    color: #111827;
+  }
+
+  .dark select option {
+    background-color: #1e1b4b;
+    color: #f1f5f9;
+  }
+
+  body {
+    @apply text-foreground;
+    background:
+      linear-gradient(135deg,
+        #b8a9f8 0%,
+        #93a8f4 30%,
+        #85c0f9 65%,
+        #b8a9f8 100%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  .dark body {
+    background:
+      linear-gradient(135deg,
+        #1e1b4b 0%,
+        #1e3a5f 40%,
+        #0f172a 70%,
+        #1e1b4b 100%
+      );
+    background-attachment: fixed;
+  }
+}
+
+/* ── Liquid Glass ─────────────────────────────────────────── */
+@layer components {
+
+  /* Carte principale */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.80);
+    box-shadow:
+      0 4px 24px -4px rgba(79, 70, 229, 0.10),
+      0 1px 6px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .dark .glass {
+    background: rgba(20, 18, 55, 0.50);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 8px 32px -4px rgba(0, 0, 0, 0.40),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* Sidebar — toujours sombre, fond givré opaque */
+  .glass-sidebar {
+    background: rgba(8, 7, 22, 0.88);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 4px 0 40px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Topbar */
+  .glass-topbar {
+    background: rgba(255, 255, 255, 0.42);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: 0 1px 0 rgba(79, 70, 229, 0.06);
+  }
+
+  .dark .glass-topbar {
+    background: rgba(12, 10, 30, 0.65);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+}
