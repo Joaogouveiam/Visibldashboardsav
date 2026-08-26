@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   HeartHandshake,
+  Users,
   BarChart2,
   Settings,
   LogOut,
@@ -17,6 +18,7 @@ import {
 const navItems = [
   { href: '/dashboard',               label: 'Vue d\'ensemble', icon: LayoutDashboard },
   { href: '/dashboard/besoin-humain', label: 'Besoin humain',   icon: HeartHandshake, alert: true },
+  { href: '/dashboard/clients',       label: 'Clients',         icon: Users },
   { href: '/dashboard/statistiques',  label: 'Statistiques',    icon: BarChart2 },
   { href: '/dashboard/parametres',    label: 'Paramètres',      icon: Settings },
 ]

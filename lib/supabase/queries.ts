@@ -7,6 +7,7 @@ import type {
   StatusDistribution,
   CategoryDistribution,
   Profile,
+  ClientContext,
 } from '@/lib/types/sav'
 
 const DEFAULT_STATS: DashboardStats = {
@@ -381,4 +382,22 @@ export async function getEscalationById(
   }
 
   return { escalation, conversation, error: null }
+}
+
+// ── Clients (client_contexts) ─────────────────────────────────
+
+export async function getAllClients(): Promise<{ items: ClientContext[]; error: string | null }> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('client_contexts')
+    .select('*')
+    .order('created_at', { ascending: false, nullsFirst: false })
+
+  if (error) {
+    console.error('[getAllClients]', error.message)
+    return { items: [], error: error.message }
+  }
+
+  return { items: (data ?? []) as ClientContext[], error: null }
 }

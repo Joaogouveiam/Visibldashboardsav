@@ -77,3 +77,33 @@ export interface CategoryDistribution {
   label:    string
   count:    number
 }
+
+// ── Clients (client_contexts) ─────────────────────────────────
+
+export const CLIENT_OFFERS = [
+  'L\'Essentiel',
+  'Visibilité Google',
+  'E-commerce',
+] as const
+
+export type ClientOffer = typeof CLIENT_OFFERS[number]
+
+export interface ClientContext {
+  id:              string
+  phone:           string | null
+  email:           string | null
+  full_name:       string | null
+  company:         string | null
+  offer:           string | null
+  context_summary: string | null
+  raw_history:     unknown
+  tags:            string[] | null
+  created_at:      string | null
+  updated_at:      string | null
+}
+
+/** Champs modifiables depuis le dashboard (formulaire + édition inline + import CSV). */
+export type ClientContextInput = Pick<
+  ClientContext,
+  'full_name' | 'email' | 'phone' | 'company' | 'offer' | 'context_summary'
+>
