@@ -40,15 +40,21 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+
+      // La confirmation par email est désactivée côté Supabase : signUp renvoie
+      // directement une session. Sans session, le compte existe déjà ou la
+      // confirmation a été réactivée — inutile d'envoyer l'utilisateur sur le
+      // dashboard, le proxy le renverrait aussitôt vers le login.
+      if (!data.session) {
+        throw new Error(
+          "Impossible d'ouvrir la session. Ce compte existe peut-être déjà : essayez de vous connecter.",
+        );
+      }
+
+      router.push("/dashboard");
+      router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
