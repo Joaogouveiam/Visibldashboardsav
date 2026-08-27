@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const hasEnvVars =
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
-  process.env.NEXT_PUBLIC_SUPABASE_URL !== 'your-project-url' &&
-  !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY &&
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY !== 'your-publishable-or-anon-key'
+  !!process.env.SUPABASE_URL &&
+  process.env.SUPABASE_URL !== 'your-project-url' &&
+  !!process.env.SUPABASE_PUBLISHABLE_KEY &&
+  process.env.SUPABASE_PUBLISHABLE_KEY !== 'your-publishable-or-anon-key'
