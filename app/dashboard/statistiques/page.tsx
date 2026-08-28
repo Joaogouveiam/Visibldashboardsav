@@ -6,7 +6,10 @@ import {
   type ConversationFilters,
 } from '@/lib/supabase/queries'
 import type { Conversation } from '@/lib/types/sav'
+import { normalizeHistory } from '@/lib/conversation'
+import { normalizeAttachments } from '@/lib/media'
 import { ConversationsFilters } from '@/components/dashboard/conversations-filters'
+import { AttachmentIndicator } from '@/components/dashboard/message-attachments'
 import { BarChart2, MessageCircle, Mail, Instagram, Clock, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -64,16 +67,18 @@ function statusLabel(s: string | null) {
 }
 
 function lastMessage(history: Conversation['history']): string | null {
-  if (!Array.isArray(history) || history.length === 0) return null
-  const last = history[history.length - 1]
-  return last?.content ?? null
+  const messages = normalizeHistory(history)
+  if (messages.length === 0) return null
+  const last = messages[messages.length - 1]
+  return last?.content?.trim() || null
 }
 
 // ── Carte conversation ────────────────────────────────────────
 
 function ConversationCard({ conv }: { conv: Conversation }) {
-  const preview  = lastMessage(conv.history)
-  const msgCount = Array.isArray(conv.history) ? conv.history.length : 0
+  const preview     = lastMessage(conv.history)
+  const msgCount    = normalizeHistory(conv.history).length
+  const attachCount = normalizeAttachments(conv.attachments).length
 
   return (
     <div className="glass rounded-2xl flex overflow-hidden group hover:-translate-y-0.5 hover:shadow-xl transition-all duration-200 relative">
@@ -123,10 +128,13 @@ function ConversationCard({ conv }: { conv: Conversation }) {
           </div>
         </div>
 
-        {preview && (
-          <p className="text-sm text-muted-foreground leading-relaxed line-clamp-1 ml-[52px]">
-            {preview}
-          </p>
+        {(preview || attachCount > 0) && (
+          <div className="flex items-center gap-1.5 ml-[52px]">
+            <AttachmentIndicator count={attachCount} />
+            <p className="text-sm text-muted-foreground leading-relaxed line-clamp-1">
+              {preview ?? `${attachCount} pièce${attachCount > 1 ? 's' : ''} jointe${attachCount > 1 ? 's' : ''}`}
+            </p>
+          </div>
         )}
 
         <div className="flex items-center justify-between mt-3 ml-[52px]">

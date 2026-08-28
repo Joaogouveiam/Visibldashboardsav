@@ -78,6 +78,10 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
   ```env
   SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
   SUPABASE_PUBLISHABLE_KEY=[INSERT SUPABASE PROJECT API PUBLISHABLE OR ANON KEY]
+
+  # Pièces jointes WhatsApp (facultatif) — voir plus bas
+  TWILIO_ACCOUNT_SID=[INSERT TWILIO ACCOUNT SID]
+  TWILIO_AUTH_TOKEN=[INSERT TWILIO AUTH TOKEN]
   ```
   > [!NOTE]
   > This example uses `SUPABASE_PUBLISHABLE_KEY`, which refers to Supabase's new **publishable** key format.
@@ -85,6 +89,14 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
   > See the [full announcement](https://github.com/orgs/supabase/discussions/29260) for more information.
 
   Both `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
+
+  `TWILIO_ACCOUNT_SID` et `TWILIO_AUTH_TOKEN` ([console Twilio](https://console.twilio.com)) servent
+  uniquement à afficher les pièces jointes WhatsApp des conversations. Les URLs stockées dans
+  `conversations.attachments` exigent une Basic Auth : elles sont relayées par la route serveur
+  `/api/media`, qui n'accepte que les URLs `https://api.twilio.com` et n'est ouverte qu'aux
+  utilisateurs connectés. Ces identifiants ne doivent jamais être préfixés `NEXT_PUBLIC_` ni exposés
+  via `next.config.ts`. Sans eux, les conversations s'affichent normalement et les pièces jointes
+  tombent sur leur état d'erreur.
 
 5. You can now run the Next.js local development server:
 

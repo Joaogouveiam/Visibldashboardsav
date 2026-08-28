@@ -2,10 +2,13 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getConversationById } from '@/lib/supabase/queries'
-import type { Conversation } from '@/lib/types/sav'
+import type { Attachment, ChatMessage } from '@/lib/types/sav'
+import { isClientRole, messageTimestamp, normalizeHistory } from '@/lib/conversation'
+import { groupAttachmentsByMessage, normalizeAttachments } from '@/lib/media'
+import { AttachmentsMenu, MessageAttachments, OrphanAttachments } from '@/components/dashboard/message-attachments'
 import {
   ArrowLeft, MessageCircle, Mail, Instagram,
-  Hash, Calendar, User,
+  Hash, Calendar,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -100,17 +103,18 @@ function InfoRow({
 
 function ChatBubble({
   msg,
+  attachments,
   contactName,
   grad,
 }: {
-  msg: { role: string; content: string; ts?: string }
+  msg: ChatMessage
+  attachments: Attachment[]
   contactName: string | null
   grad: string
 }) {
-  const isClient = ['user', 'customer', 'client', 'human'].includes(
-    (msg.role ?? '').toLowerCase()
-  )
-  const time = formatTime(msg.ts ?? null)
+  const isClient = isClientRole(msg.role)
+  const time = formatTime(messageTimestamp(msg))
+  const content = msg.content?.trim() ?? ''
 
   return (
     <div className={cn('flex gap-2 items-end mb-2', isClient ? 'justify-start' : 'justify-end')}>
@@ -127,14 +131,22 @@ function ChatBubble({
         'max-w-[72%] flex flex-col',
         isClient ? 'items-start' : 'items-end'
       )}>
-        <div className={cn(
-          'px-3.5 py-2.5 text-sm leading-relaxed break-words shadow-sm',
-          isClient
-            ? 'bg-white dark:bg-white/[0.09] text-foreground rounded-2xl rounded-bl-sm'
-            : 'bg-indigo-600 text-white rounded-2xl rounded-br-sm shadow-indigo-500/20'
-        )}>
-          {msg.content}
-        </div>
+        {content && (
+          <div className={cn(
+            'px-3.5 py-2.5 text-sm leading-relaxed break-words shadow-sm',
+            isClient
+              ? 'bg-white dark:bg-white/[0.09] text-foreground rounded-2xl rounded-bl-sm'
+              : 'bg-indigo-600 text-white rounded-2xl rounded-br-sm shadow-indigo-500/20'
+          )}>
+            {content}
+          </div>
+        )}
+
+        <MessageAttachments
+          attachments={attachments}
+          align={isClient ? 'start' : 'end'}
+        />
+
         {time && (
           <span className="text-[10px] text-muted-foreground/50 mt-1 px-1">{time}</span>
         )}
@@ -155,19 +167,22 @@ async function ConversationDetail({ id }: { id: string }) {
   const { conversation: conv, error } = await getConversationById(id)
   if (error || !conv) notFound()
 
-  // Normalise l'historique (peut être JSONB string ou array)
-  const rawHistory = conv.history
-  const history: Array<{ role: string; content: string; ts?: string }> = (
-    Array.isArray(rawHistory)
-      ? rawHistory
-      : typeof rawHistory === 'string'
-        ? (() => { try { const p = JSON.parse(rawHistory); return Array.isArray(p) ? p : [] } catch { return [] } })()
-        : []
-  ).filter((m: { role: string; content: string; ts?: string }) => m.content && m.content.trim() !== '')
+  // Normalise l'historique (peut être jsonb string ou array)
+  const rawHistory  = normalizeHistory(conv.history)
+  const attachments = normalizeAttachments(conv.attachments)
+
+  // Les PJ sont rattachées par horodatage : le regroupement se fait sur
+  // l'historique brut pour que les index restent valides.
+  const { byIndex, orphans } = groupAttachmentsByMessage(rawHistory, attachments)
+
+  // On garde les messages vides qui portent une PJ (photo envoyée sans texte).
+  const history = rawHistory
+    .map((msg, index) => ({ msg, index, attachments: byIndex.get(index) ?? [] }))
+    .filter(m => (m.msg.content?.trim() ?? '') !== '' || m.attachments.length > 0)
 
   const grad = avatarGrad(conv.contact_name)
   const msgCount = history.length
-  const clientMsgs = history.filter(m => ['user', 'customer', 'client', 'human'].includes((m.role ?? '').toLowerCase())).length
+  const clientMsgs = history.filter(m => isClientRole(m.msg.role)).length
   const agentMsgs  = msgCount - clientMsgs
 
   return (
@@ -257,12 +272,15 @@ async function ConversationDetail({ id }: { id: string }) {
               {msgCount} message{msgCount > 1 ? 's' : ''} · {channelLabel(conv.channel)}
             </p>
           </div>
-          <div className={cn(
-            'inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium border',
-            channelColor(conv.channel)
-          )}>
-            <ChannelIcon channel={conv.channel} />
-            {channelLabel(conv.channel)}
+          <div className="flex items-center gap-2 shrink-0">
+            <AttachmentsMenu attachments={attachments} />
+            <div className={cn(
+              'inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg font-medium border',
+              channelColor(conv.channel)
+            )}>
+              <ChannelIcon channel={conv.channel} />
+              {channelLabel(conv.channel)}
+            </div>
           </div>
         </div>
 
@@ -271,7 +289,7 @@ async function ConversationDetail({ id }: { id: string }) {
           className="flex-1 overflow-y-auto px-5 py-5"
           style={{ background: 'transparent' }}
         >
-          {history.length === 0 ? (
+          {history.length === 0 && orphans.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <MessageCircle size={36} className="text-muted-foreground/30 mx-auto mb-3" />
@@ -279,9 +297,18 @@ async function ConversationDetail({ id }: { id: string }) {
               </div>
             </div>
           ) : (
-            history.map((msg, i) => (
-              <ChatBubble key={i} msg={msg} contactName={conv.contact_name} grad={grad} />
-            ))
+            <>
+              {history.map(({ msg, index, attachments: msgAttachments }) => (
+                <ChatBubble
+                  key={index}
+                  msg={msg}
+                  attachments={msgAttachments}
+                  contactName={conv.contact_name}
+                  grad={grad}
+                />
+              ))}
+              <OrphanAttachments attachments={orphans} />
+            </>
           )}
         </div>
 

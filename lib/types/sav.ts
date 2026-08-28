@@ -15,9 +15,31 @@ export interface Escalation {
   status:           string
   channel:          string
   mail_id:          string | null
-  history:          Array<{ role: string; content: string; ts?: string }> | null
+  history:          ChatMessage[] | null
   created_at:       string
   updated_at:       string
+}
+
+// ── Messages & pièces jointes ─────────────────────────────────
+
+export interface ChatMessage {
+  role:    string
+  content: string
+  /** Selon la source, l'horodatage arrive sous `ts` ou sous `timestamp`. */
+  ts?:        string
+  timestamp?: string
+}
+
+/**
+ * Pièce jointe WhatsApp issue de `conversations.attachments` (jsonb). La
+ * colonne contient soit un simple tableau d'URLs, soit des objets détaillés :
+ * `normalizeAttachments` ramène les deux à cette forme. Les URLs pointent vers
+ * l'API Twilio et exigent une Basic Auth — elles passent donc par /api/media.
+ */
+export interface Attachment {
+  url:       string
+  mimeType:  string | null
+  timestamp: string | null
 }
 
 // ── Conversations (chatbot) ───────────────────────────────────
@@ -27,7 +49,8 @@ export interface Conversation {
   channel:         string
   contact_name:    string | null
   contact_id:      string | null
-  history:         Array<{ role: string; content: string; ts?: string }>
+  history:         ChatMessage[]
+  attachments:     Attachment[] | null
   status:          string | null
   paused:          boolean | null
   last_message_at: string | null

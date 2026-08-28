@@ -2,11 +2,14 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getEscalationById } from '@/lib/supabase/queries'
+import { isClientRole, normalizeHistory } from '@/lib/conversation'
+import { groupAttachmentsByMessage, normalizeAttachments } from '@/lib/media'
 import { StatusChanger } from '@/components/dashboard/status-changer'
 import { AgentReplyPanel } from '@/components/dashboard/agent-reply-panel'
+import { AttachmentsMenu, MessageAttachments, OrphanAttachments } from '@/components/dashboard/message-attachments'
 import {
   ArrowLeft, MessageCircle, Mail, Instagram,
-  User, Hash, Tag, Clock, Calendar, RefreshCw,
+  Hash, Tag, Clock, Calendar, RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -57,15 +60,17 @@ async function EscalationDetail({ id }: { id: number }) {
   if (error || !esc) notFound()
 
   // Priorité : history sur l'escalade, sinon fallback sur la conversation liée
-  function normalizeHistory(raw: unknown): Array<{ role: string; content: string; ts?: string }> {
-    if (Array.isArray(raw)) return raw
-    if (typeof raw === 'string') {
-      try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
-    }
-    return []
-  }
-  const escHistory = normalizeHistory(esc.history)
-  const history = escHistory.length > 0 ? escHistory : normalizeHistory(conversation?.history)
+  const escHistory  = normalizeHistory(esc.history)
+  const rawHistory  = escHistory.length > 0 ? escHistory : normalizeHistory(conversation?.history)
+  const attachments = normalizeAttachments(conversation?.attachments)
+
+  // Les PJ vivent sur la conversation : on les rattache par horodatage.
+  const { byIndex, orphans } = groupAttachmentsByMessage(rawHistory, attachments)
+
+  // On conserve les messages sans texte qui portent une PJ.
+  const history = rawHistory
+    .map((msg, index) => ({ msg, index, attachments: byIndex.get(index) ?? [] }))
+    .filter(m => (m.msg.content?.trim() ?? '') !== '' || m.attachments.length > 0)
 
   return (
     <div className="space-y-5">
@@ -148,22 +153,24 @@ async function EscalationDetail({ id }: { id: number }) {
           )}
 
           {/* Historique conversation */}
-          {history.length > 0 && (
+          {(history.length > 0 || orphans.length > 0) && (
             <div className="glass rounded-2xl p-5">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 mb-4">
-                Historique conversation ({history.length} messages)
-              </h2>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+                  Historique conversation ({history.length} messages)
+                </h2>
+                <AttachmentsMenu attachments={attachments} />
+              </div>
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                {history.filter(msg => msg.content?.trim()).map((msg, i) => {
+                {history.map(({ msg, index, attachments: msgAttachments }) => {
                   // Rôles client : user, customer, client, human
                   // Rôles agent  : assistant, agent, bot, system — tout le reste
-                  const isClient = ['user', 'customer', 'client', 'human'].includes(
-                    (msg.role ?? '').toLowerCase()
-                  )
+                  const isClient = isClientRole(msg.role)
+                  const content  = msg.content?.trim() ?? ''
 
                   return (
                     <div
-                      key={i}
+                      key={index}
                       className={cn(
                         'flex gap-2.5 items-end',
                         isClient ? 'justify-start' : 'justify-end'
@@ -176,14 +183,26 @@ async function EscalationDetail({ id }: { id: number }) {
                         </div>
                       )}
 
-                      {/* Bulle */}
+                      {/* Bulle + pièces jointes */}
                       <div className={cn(
-                        'max-w-[75%] px-3.5 py-2.5 text-sm leading-relaxed',
-                        isClient
-                          ? 'bg-white/60 dark:bg-white/[0.07] text-foreground border border-white/70 dark:border-white/10 rounded-2xl rounded-bl-sm'
-                          : 'bg-indigo-600 text-white rounded-2xl rounded-br-sm shadow-md shadow-indigo-500/20'
+                        'max-w-[75%] flex flex-col',
+                        isClient ? 'items-start' : 'items-end'
                       )}>
-                        {msg.content}
+                        {content && (
+                          <div className={cn(
+                            'px-3.5 py-2.5 text-sm leading-relaxed',
+                            isClient
+                              ? 'bg-white/60 dark:bg-white/[0.07] text-foreground border border-white/70 dark:border-white/10 rounded-2xl rounded-bl-sm'
+                              : 'bg-indigo-600 text-white rounded-2xl rounded-br-sm shadow-md shadow-indigo-500/20'
+                          )}>
+                            {content}
+                          </div>
+                        )}
+
+                        <MessageAttachments
+                          attachments={msgAttachments}
+                          align={isClient ? 'start' : 'end'}
+                        />
                       </div>
 
                       {isClient ? null : (
@@ -194,6 +213,8 @@ async function EscalationDetail({ id }: { id: number }) {
                     </div>
                   )
                 })}
+
+                <OrphanAttachments attachments={orphans} />
               </div>
             </div>
           )}
