@@ -82,6 +82,10 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
   # Pièces jointes WhatsApp (facultatif) — voir plus bas
   TWILIO_ACCOUNT_SID=[INSERT TWILIO ACCOUNT SID]
   TWILIO_AUTH_TOKEN=[INSERT TWILIO AUTH TOKEN]
+
+  # Envoi des réponses agent — voir « Répondre au client » plus bas
+  N8N_WEBHOOK_URL=[INSERT N8N WEBHOOK URL]
+  SUPABASE_SERVICE_ROLE_KEY=[FACULTATIF]
   ```
   > [!NOTE]
   > This example uses `SUPABASE_PUBLISHABLE_KEY`, which refers to Supabase's new **publishable** key format.
@@ -109,6 +113,68 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
 6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
 
 > Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
+
+## Répondre au client depuis le dashboard
+
+Deux écrans permettent à l'agent de répondre, tous deux avec pièce jointe :
+
+- **Besoin humain** (`/dashboard/besoin-humain/[id]`) — le panneau « Répondre au client »
+  d'une escalade. Il conserve sa forme de payload historique (`escalation`, `history`,
+  `agent_message`…) et y ajoute les champs de PJ ; `POST /api/send-response`.
+- **Détail de conversation** (`/dashboard/statistiques/[id]`) — zone de réponse en bas du
+  fil, affichée si la conversation n'est pas `closed` et que son canal est `whatsapp` ou
+  `email` ; `POST /api/conversations/reply`, payload décrit ci-dessous.
+
+Dans les deux cas l'envoi part vers le webhook n8n unique `N8N_WEBHOOK_URL` — le champ
+`channel` du payload indique au workflow s'il doit router vers Twilio (WhatsApp) ou
+Gmail (email).
+
+### 1. Créer le bucket de stockage
+
+Les pièces jointes vivent dans le bucket public `agent-attachments`. Appliquez la migration
+`supabase/migrations/20260829090000_agent_attachments_bucket.sql`, soit avec la CLI
+(`supabase db push`), soit en collant son contenu dans le **SQL Editor** du dashboard Supabase.
+Sans ce bucket, l'ajout d'une pièce jointe échoue avec le message
+« Bucket « agent-attachments » introuvable ».
+
+Le bucket doit rester **public** : Twilio télécharge le média depuis l'URL transmise dans
+`mediaUrl`, sans en-tête d'authentification.
+
+### 2. Clé service role (facultative)
+
+`SUPABASE_SERVICE_ROLE_KEY` n'est nécessaire que si vous ne voulez pas des policies Storage
+posées par la migration. Sans elle, l'upload s'appuie sur la session de l'agent connecté.
+Cette clé contourne RLS : elle ne doit **jamais** être préfixée `NEXT_PUBLIC_` ni exposée
+via `next.config.ts`.
+
+### 3. Chemin d'un envoi
+
+1. `POST /api/upload` valide le fichier annoncé (type et taille selon le canal) et renvoie une
+   URL signée limitée au chemin `{channel}/{conversation_id}/{timestamp}_{filename}`.
+   Le navigateur téléverse ensuite **directement** vers Supabase Storage : les octets ne
+   transitent pas par Next.js, ce qui évite la limite de corps des fonctions serverless
+   (~4,5 Mo sur Vercel) face aux 25 Mo autorisés en email.
+2. `POST /api/conversations/reply` relit le canal et le destinataire **en base** (le navigateur
+   ne choisit ni à qui ni par quel canal on écrit), vérifie que l'URL de la pièce jointe
+   appartient bien au bucket, puis appelle n8n. `POST /api/send-response` (escalades)
+   transmet son payload tel quel mais revalide de la même façon les URLs `mediaUrl` /
+   `attachmentUrl` : ce sont elles que Twilio et Gmail iront chercher.
+3. Le message est affiché immédiatement dans le fil (optimistic update) avec le rôle
+   `agent_human`. L'écriture réelle dans `conversations.history` est faite par n8n après
+   l'envoi ; elle apparaît au rechargement de la page.
+
+### 4. Limites par canal
+
+| | WhatsApp | Email |
+|---|---|---|
+| Types acceptés | JPEG, PNG, WebP, PDF, MP3, OGG | tous |
+| Taille max | 16 Mo | 25 Mo |
+| Message texte | facultatif si une PJ est jointe | obligatoire |
+| Objet | — | pré-rempli `Re: …` si un objet est connu, sinon vide et éditable |
+
+L'objet est déduit du dernier message d'historique portant un champ `subject` : `conversations`
+n'a pas de colonne dédiée. Tant que le workflow n8n ne renseigne pas ce champ, l'objet
+s'affiche vide et reste librement éditable.
 
 ## Feedback and issues
 

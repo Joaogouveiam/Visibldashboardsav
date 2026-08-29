@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { Send, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { canReplyTo, replyChannel } from '@/lib/reply'
+import { postJson, uploadAttachment, type UploadTicket } from '@/lib/upload-client'
+import { AttachmentButton, FilePreview } from '@/components/dashboard/attachment-picker'
 import type { Escalation, Conversation } from '@/lib/types/sav'
 
 function textToHtml(text: string): string {
@@ -18,45 +21,68 @@ interface AgentReplyPanelProps {
   conversation: Conversation | null
 }
 
-type SendState = 'idle' | 'sending' | 'success' | 'error'
+type SendState = 'idle' | 'uploading' | 'sending' | 'success' | 'error'
+
+/** Champs de PJ attendus par n8n, à plat et nommés selon le canal. */
+function attachmentFields(channel: string, attachment: UploadTicket | null) {
+  if (!attachment) return {}
+  if (channel === 'whatsapp') return { mediaUrl: attachment.url }
+  return {
+    attachmentUrl:      attachment.url,
+    attachmentName:     attachment.name,
+    attachmentMimeType: attachment.mimeType,
+  }
+}
 
 export function AgentReplyPanel({ escalation, conversation }: AgentReplyPanelProps) {
-  const isEmail = (escalation.channel ?? '').toLowerCase() === 'email'
+  const channel = replyChannel(escalation.channel)
+  const isEmail = channel === 'email'
+
+  // Les PJ ne partent que sur les canaux qui savent porter un média, vers un
+  // contact connu et un dossier non clos — exactement ce que /api/upload
+  // exige, autant ne pas proposer un bouton qui échouerait.
+  const canAttach = channel !== null && canReplyTo(escalation)
 
   const [message,     setMessage]     = useState('')
+  const [file,        setFile]        = useState<File | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [state,       setState]       = useState<SendState>('idle')
   const [errorMsg,    setErrorMsg]    = useState('')
 
-  async function handleSend() {
-    if (!message.trim() || state === 'sending') return
+  const busy    = state === 'uploading' || state === 'sending'
+  // Une PJ seule suffit sur WhatsApp ; l'email exige un corps de message.
+  const canSend = !busy && (message.trim() !== '' || (file !== null && channel === 'whatsapp'))
 
-    setState('sending')
+  async function handleSend() {
+    if (!canSend) return
+
     setErrorMsg('')
 
-    const payload = {
-      escalation,
-      conversation,
-      history:       escalation.history ?? conversation?.history ?? [],
-      agent_message: isEmail ? textToHtml(message.trim()) : message.trim(),
-      sent_at:       new Date().toISOString(),
-    }
-
     try {
-      const res = await fetch('/api/send-response', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error ?? `HTTP ${res.status}`)
+      let attachment: UploadTicket | null = null
+      if (file) {
+        setState('uploading')
+        attachment = await uploadAttachment({ escalation_id: escalation.id }, file)
       }
+
+      setState('sending')
+      await postJson('/api/send-response', {
+        escalation,
+        conversation,
+        history:       escalation.history ?? conversation?.history ?? [],
+        agent_message: isEmail ? textToHtml(message.trim()) : message.trim(),
+        sent_at:       new Date().toISOString(),
+        // Champs ajoutés pour le routage et la PJ côté n8n.
+        channel:         escalation.channel,
+        conversation_id: conversation?.id ?? null,
+        to:              escalation.contact_id,
+        ...attachmentFields(escalation.channel, attachment),
+      })
 
       setState('success')
       setMessage('')
-      setTimeout(() => setState('idle'), 4000)
+      setFile(null)
+      setTimeout(() => setState(s => (s === 'success' ? 'idle' : s)), 4000)
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erreur inconnue')
       setState('error')
@@ -92,7 +118,7 @@ export function AgentReplyPanel({ escalation, conversation }: AgentReplyPanelPro
           value={message}
           onChange={e => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={state === 'sending' || state === 'success'}
+          disabled={busy || state === 'success'}
           placeholder={`Rédigez votre réponse pour ${escalation.contact_name ?? 'le client'}…`}
           rows={5}
           className={cn(
@@ -108,6 +134,8 @@ export function AgentReplyPanel({ escalation, conversation }: AgentReplyPanelPro
           Ctrl+Entrée pour envoyer
         </span>
       </div>
+
+      {file && <FilePreview file={file} disabled={busy} onRemove={() => setFile(null)} />}
 
       {isEmail && showPreview && message.trim() && (
         <div className="rounded-xl border border-blue-200/60 dark:border-blue-800/40 bg-white/60 dark:bg-white/[0.04] overflow-hidden">
@@ -131,27 +159,35 @@ export function AgentReplyPanel({ escalation, conversation }: AgentReplyPanelPro
       )}
       {state === 'error' && (
         <div className="flex items-center gap-2 text-sm text-red-500">
-          <AlertCircle size={15} />
+          <AlertCircle size={15} className="shrink-0" />
           {errorMsg || "Échec de l'envoi. Réessayez."}
         </div>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {canAttach ? (
+          <AttachmentButton
+            channel={channel}
+            file={file}
+            disabled={busy}
+            onPick={picked => { setFile(picked); setState('idle'); setErrorMsg('') }}
+            onError={msg => { setErrorMsg(msg); setState('error') }}
+          />
+        ) : <span />}
+
         <button
           onClick={handleSend}
-          disabled={!message.trim() || state === 'sending' || state === 'success'}
+          disabled={!canSend}
           className={cn(
-            'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150',
+            'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 shrink-0',
             'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
             'hover:bg-indigo-700 active:scale-95',
             'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 disabled:active:scale-100'
           )}
         >
-          {state === 'sending' ? (
-            <><Loader2 size={14} className="animate-spin" /> Envoi…</>
-          ) : (
-            <><Send size={14} /> Envoyer la réponse</>
-          )}
+          {state === 'uploading' && <><Loader2 size={14} className="animate-spin" /> Envoi du fichier…</>}
+          {state === 'sending'   && <><Loader2 size={14} className="animate-spin" /> Envoi…</>}
+          {!busy                 && <><Send size={14} /> Envoyer la réponse</>}
         </button>
       </div>
     </div>

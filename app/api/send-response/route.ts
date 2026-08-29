@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isAgentAttachmentUrl } from '@/lib/reply'
 
+/** Champs de PJ que le panneau « Besoin humain » peut joindre au payload. */
+const ATTACHMENT_URL_FIELDS = ['mediaUrl', 'attachmentUrl'] as const
+
+/**
+ * Relais vers le webhook n8n pour le panneau de réponse des escalades.
+ *
+ * Le corps est transmis tel quel — le workflow n8n consomme la forme
+ * historique (`escalation`, `history`, `agent_message`…). Seules les URLs de
+ * pièce jointe sont revalidées : ce sont elles que Twilio ou Gmail iront
+ * chercher, et une URL arbitraire ferait relayer n'importe quel contenu depuis
+ * notre compte.
+ */
 export async function POST(req: NextRequest) {
   const webhookUrl = process.env.N8N_WEBHOOK_URL
   if (!webhookUrl) {
@@ -11,6 +24,17 @@ export async function POST(req: NextRequest) {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  if (body && typeof body === 'object') {
+    const record = body as Record<string, unknown>
+    for (const field of ATTACHMENT_URL_FIELDS) {
+      const value = record[field]
+      if (value === undefined || value === null) continue
+      if (typeof value !== 'string' || !isAgentAttachmentUrl(value, process.env.SUPABASE_URL ?? '')) {
+        return NextResponse.json({ error: 'Pièce jointe invalide' }, { status: 400 })
+      }
+    }
   }
 
   const res = await fetch(webhookUrl, {

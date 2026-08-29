@@ -28,6 +28,15 @@ export interface ChatMessage {
   /** Selon la source, l'horodatage arrive sous `ts` ou sous `timestamp`. */
   ts?:        string
   timestamp?: string
+  /**
+   * Réponses envoyées depuis le dashboard (`role: 'agent_human'`) : la pièce
+   * jointe est portée par le message lui-même, et non par la colonne
+   * `conversations.attachments` réservée aux médias entrants Twilio.
+   */
+  attachmentUrl?:  string
+  attachmentName?: string
+  /** Objet de l'email, quand le workflow n8n le renseigne. */
+  subject?: string
 }
 
 /**
@@ -40,6 +49,8 @@ export interface Attachment {
   url:       string
   mimeType:  string | null
   timestamp: string | null
+  /** Nom d'origine du fichier, connu seulement pour les PJ envoyées par l'agent. */
+  name:      string | null
 }
 
 // ── Conversations (chatbot) ───────────────────────────────────

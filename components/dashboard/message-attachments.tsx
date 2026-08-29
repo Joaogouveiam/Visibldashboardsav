@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { Attachment } from '@/lib/types/sav'
-import { attachmentKind, isRenderableImage, mediaProxyUrl } from '@/lib/media'
+import { attachmentKind, displayMediaUrl, isRenderableImage } from '@/lib/media'
 
 // ── Visionneuse plein écran ───────────────────────────────────
 
@@ -214,7 +214,7 @@ export function MessageAttachments({
           {images.map((a, i) => (
             <ImageAttachment
               key={`${a.url}-${i}`}
-              src={mediaProxyUrl(a.url)}
+              src={displayMediaUrl(a.url)}
               solo={images.length === 1}
               certain={attachmentKind(a) === 'image'}
             />
@@ -225,9 +225,10 @@ export function MessageAttachments({
       {others.map((a, i) => (
         <FallbackLink
           key={`${a.url}-${i}`}
-          href={mediaProxyUrl(a.url)}
+          href={displayMediaUrl(a.url)}
           icon={attachmentKind(a) === 'pdf' ? FileText : Paperclip}
-          label={attachmentKind(a) === 'pdf' ? 'Voir le document PDF' : 'Voir la pièce jointe'}
+          // Le nom d'origine n'est connu que pour les PJ envoyées par l'agent.
+          label={a.name ?? (attachmentKind(a) === 'pdf' ? 'Voir le document PDF' : 'Voir la pièce jointe')}
         />
       ))}
     </div>
@@ -312,9 +313,9 @@ function buildEntries(attachments: Attachment[]): MenuEntry[] {
       :                              `Pièce jointe${others > 1 ? ` ${++nOther}` : ''}`
 
     return {
-      src:   mediaProxyUrl(a.url),
+      src:   displayMediaUrl(a.url),
       image: isRenderableImage(a),
-      label,
+      label: a.name ?? label,
       date:  formatShortDate(a.timestamp),
     }
   })

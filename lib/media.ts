@@ -24,6 +24,55 @@ export function mediaProxyUrl(url: string): string {
   return `/api/media?url=${encodeURIComponent(url)}`
 }
 
+/**
+ * URL d'affichage d'une PJ quelle que soit sa provenance. Seuls les médias
+ * Twilio ont besoin du relais authentifié ; les PJ envoyées par l'agent vivent
+ * dans le bucket public `agent-attachments` et se chargent directement — les
+ * faire passer par /api/media les ferait rejeter comme « URL non autorisée ».
+ */
+export function displayMediaUrl(url: string): string {
+  return isAllowedMediaUrl(url) ? mediaProxyUrl(url) : url
+}
+
+/** Extensions reconnues, pour déduire un type MIME à partir d'un nom de fichier. */
+const EXTENSION_MIME: Record<string, string> = {
+  jpg:  'image/jpeg',  jpeg: 'image/jpeg', png:  'image/png',
+  webp: 'image/webp',  gif:  'image/gif',
+  pdf:  'application/pdf',
+  mp3:  'audio/mpeg',  ogg:  'audio/ogg',  oga: 'audio/ogg',
+  m4a:  'audio/mp4',   wav:  'audio/wav',
+  mp4:  'video/mp4',
+  doc:  'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls:  'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv:  'text/csv',    txt:  'text/plain',  zip: 'application/zip',
+}
+
+/**
+ * Type MIME déduit de l'extension. Nécessaire à deux endroits : la validation
+ * d'un fichier dont le navigateur n'annonce aucun type (`File.type` vide), et
+ * l'affichage d'une PJ d'agent dont on ne connaît que le nom.
+ */
+export function mimeTypeFromName(name: string | null | undefined): string | null {
+  const ext = (name ?? '').toLowerCase().split('.').pop()
+  return (ext && EXTENSION_MIME[ext]) ?? null
+}
+
+/** PJ portée par un message d'agent (`attachmentUrl` / `attachmentName`). */
+export function attachmentFromMessage(
+  url: string,
+  name: string | null | undefined,
+  timestamp: string | null,
+): Attachment {
+  return {
+    url,
+    mimeType: mimeTypeFromName(name),
+    timestamp,
+    name: name?.trim() || null,
+  }
+}
+
 function str(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
 }
@@ -38,7 +87,7 @@ export function normalizeAttachments(raw: unknown): Attachment[] {
   return parseJsonArray(raw).flatMap((item): Attachment[] => {
     if (typeof item === 'string') {
       const url = str(item)
-      return url ? [{ url, mimeType: null, timestamp: null }] : []
+      return url ? [{ url, mimeType: null, timestamp: null, name: null }] : []
     }
     if (!item || typeof item !== 'object') return []
 
@@ -51,6 +100,7 @@ export function normalizeAttachments(raw: unknown): Attachment[] {
       mimeType: str(record.mimeType) ?? str(record.mime_type)
              ?? str(record.contentType) ?? str(record.content_type) ?? str(record.mime),
       timestamp: str(record.timestamp) ?? str(record.ts) ?? str(record.created_at),
+      name:      str(record.name) ?? str(record.filename) ?? str(record.file_name),
     }]
   })
 }
